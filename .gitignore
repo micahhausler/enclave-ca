@@ -1,0 +1,11 @@
+.build/
+.swiftpm/
+*.key
+*.crt
+*.csr
+!Tests/EnclaveCATests/Fixtures/**
+.worktree/
+
+# Intermediate output of hack/diagrams.py; only the PNGs are committed.
+docs/img/*.svg
+__pycache__/
