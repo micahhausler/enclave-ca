@@ -40,6 +40,8 @@ Run it before a change to signing, `credential-process`, or the CreateSession re
 - `Tests/EnclaveCATests/`: unit tests, with public fixtures from a swtpm software TPM and `tpm2-openssl`.
 - `scripts/tpm-attest.sh`: the Linux host side of TPM enrollment and attestation, using `tpm2-tools`.
 - `scripts/e2e.sh`: the end-to-end test.
+- `scripts/release.sh`: tags and publishes a source-only release and opens the Homebrew formula PR; `.claude/skills/release/SKILL.md` covers the whole release.
+- `Formula/enclave-ca.rb`: the Homebrew formula, which builds the latest release from source.
 - `docs/`: the [design and threat model](docs/design.md), [TPM attestation](docs/tpm-attestation.md), and the [Roles Anywhere walkthrough](docs/roles-anywhere.md).
 
 ## Conventions

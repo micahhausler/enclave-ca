@@ -244,7 +244,7 @@ cat >> ~/.aws/config <<EOF
 
 [profile $PROFILE_NAME]
 region = us-west-2
-credential_process = $HOME/.local/bin/enclave-ca credential-process --key $HOME/.aws/rolesanywhere/$CLIENT.key --certificate $HOME/.aws/rolesanywhere/$CLIENT.crt --trust-anchor-arn $TRUST_ANCHOR_ARN --profile-arn $PROFILE_ARN --role-arn $ROLE_ARN --cache
+credential_process = /opt/homebrew/bin/enclave-ca credential-process --key $HOME/.aws/rolesanywhere/$CLIENT.key --certificate $HOME/.aws/rolesanywhere/$CLIENT.crt --trust-anchor-arn $TRUST_ANCHOR_ARN --profile-arn $PROFILE_ARN --role-arn $ROLE_ARN --cache
 EOF
 ```
 

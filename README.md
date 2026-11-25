@@ -68,16 +68,24 @@ The [walkthrough](docs/roles-anywhere.md) has every command, and the [design doc
 
 ## Requirements
 
-- macOS 13 or later, on a Mac with a Secure Enclave (Apple silicon or T2).
+- macOS 13 or later, on an Apple silicon Mac.
 - Xcode or the Swift toolchain to build.
 - An AWS account with IAM Roles Anywhere, and the AWS CLI to create the trust anchor, role, and Roles Anywhere profile.
 - On Linux hosts: a TPM 2.0, `tpm2-tools`, `tpm2-openssl`, and `aws_signing_helper`.
 
 ## Install
 
-`swift build -c release` builds `.build/release/enclave-ca`; copy it to a directory on your PATH, such as `~/.local/bin`.
+Homebrew builds `enclave-ca` from the latest release's source:
 
-The build is ad-hoc signed.
+```sh
+brew tap micahhausler/enclave-ca https://github.com/micahhausler/enclave-ca
+brew install enclave-ca
+```
+
+Each [release](https://github.com/micahhausler/enclave-ca/releases) is a source tarball and its sha256; there are no prebuilt binaries.
+From a checkout, `swift build -c release` builds `.build/release/enclave-ca`.
+
+Every build is ad-hoc signed.
 `enclave-ca` needs no entitlements and no Developer ID signature, so it works without a $99-a-year [Apple Developer Program](https://developer.apple.com/programs/) membership.
 
 ## Client configuration
@@ -98,7 +106,7 @@ A Mac uses `enclave-ca credential-process`, because `aws_signing_helper` can't u
 ```ini
 [profile mac]
 region = us-west-2
-credential_process = /Users/you/.local/bin/enclave-ca credential-process --key /Users/you/.aws/rolesanywhere/mac.key --certificate /Users/you/.aws/rolesanywhere/mac.crt --trust-anchor-arn TRUST_ANCHOR_ARN --profile-arn PROFILE_ARN --role-arn ROLE_ARN --cache
+credential_process = /opt/homebrew/bin/enclave-ca credential-process --key /Users/you/.aws/rolesanywhere/mac.key --certificate /Users/you/.aws/rolesanywhere/mac.crt --trust-anchor-arn TRUST_ANCHOR_ARN --profile-arn PROFILE_ARN --role-arn ROLE_ARN --cache
 ```
 
 A Mac client key needs nothing, Touch ID or the login password, or the login password alone on every use, chosen when the key is made.

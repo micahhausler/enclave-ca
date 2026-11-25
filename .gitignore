@@ -16,3 +16,6 @@ ak.priv
 # Intermediate output of hack/diagrams.py; only the PNGs are committed.
 docs/img/*.svg
 __pycache__/
+
+# Output of scripts/release.sh.
+dist/
