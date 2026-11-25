@@ -79,8 +79,11 @@ Homebrew builds `enclave-ca` from the latest release's source:
 
 ```sh
 brew tap micahhausler/enclave-ca https://github.com/micahhausler/enclave-ca
+brew trust micahhausler/enclave-ca
 brew install enclave-ca
 ```
+
+Homebrew refuses to load formulae from a tap until `brew trust` marks it trusted.
 
 Each [release](https://github.com/micahhausler/enclave-ca/releases) is a source tarball and its sha256; there are no prebuilt binaries.
 From a checkout, `swift build -c release` builds `.build/release/enclave-ca`.

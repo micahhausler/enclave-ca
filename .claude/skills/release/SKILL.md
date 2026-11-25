@@ -43,5 +43,5 @@ Releases are cut from a Mac and published as me, never from CI.
    enclave-ca --version
    ```
 
-   On a Mac without the tap, `brew tap micahhausler/enclave-ca https://github.com/micahhausler/enclave-ca` and `brew install enclave-ca` replace `brew upgrade`.
+   On a Mac without the tap, `brew tap micahhausler/enclave-ca https://github.com/micahhausler/enclave-ca`, `brew trust micahhausler/enclave-ca`, and `brew install enclave-ca` replace `brew upgrade`.
    Then remove the worktrees and local branches this release made.
