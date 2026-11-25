@@ -37,7 +37,7 @@ Run it before a change to signing, `credential-process`, or the CreateSession re
 
 - `Sources/enclave-ca/main.swift`: flags, file I/O, and one function per subcommand.
 - `Sources/EnclaveCA/`: the library behind each subcommand: enclave keys, issuing, CSR parsing, TPM attestation, CreateSession signing, and the credential cache.
-- `Tests/EnclaveCATests/`: unit tests, with public fixtures from a real TPM and `tpm2-openssl`.
+- `Tests/EnclaveCATests/`: unit tests, with public fixtures from a swtpm software TPM and `tpm2-openssl`.
 - `scripts/tpm-attest.sh`: the Linux host side of TPM enrollment and attestation, using `tpm2-tools`.
 - `scripts/e2e.sh`: the end-to-end test.
 - `docs/`: the [design and threat model](docs/design.md), [TPM attestation](docs/tpm-attestation.md), and the [Roles Anywhere walkthrough](docs/roles-anywhere.md).
@@ -72,7 +72,7 @@ Use placeholders such as `HOST`, `REGION`, and `TRUST_ANCHOR_ARN` in docs and ex
 
 ## Report a bug or a vulnerability
 
-For a bug, open an issue with your enclave-ca version or commit, macOS version, Mac model, the command you ran, and its output.
+For a bug, open an issue with the output of `enclave-ca --version` and the commit you built, your macOS version, Mac model, the command you ran, and its output.
 Redact account IDs and ARNs first.
 
 For a vulnerability, don't open a public issue.

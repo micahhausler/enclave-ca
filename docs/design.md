@@ -62,7 +62,7 @@ In code, every mode uses `[.privateKeyUsage]`, and `user-presence` and `passcode
 </picture>
 
 - **Key:** service `enclave-ca credential-process`, and an account that is the SHA-256 of every input: the key blob, the certificate, the trust anchor, Roles Anywhere profile, and role ARNs, the duration, and the session name.
-- **Lifetime:** reused until 10 minutes before `Expiration`, botocore's mandatory refresh window, so an SDK never receives credentials it would immediately refresh.
+- **Lifetime:** reused until 10 minutes before `Expiration`, botocore's mandatory refresh window.
 - **Protection:** the login keychain is encrypted with the login password and never synced. Its access list names the binary that wrote the entry, so another program reading it gets a keychain prompt.
 - **Failures:** a cache read or write failure is reported on stderr and falls back to a fresh CreateSession.
 
@@ -82,6 +82,7 @@ It builds the [CreateSession](https://docs.aws.amazon.com/rolesanywhere/latest/u
 - the leaf's serial in decimal as the credential
 - a hex DER ECDSA-SHA256 signature over the string to sign
 
+It accepts trust anchor ARNs in the `aws` and `aws-us-gov` partitions, with a region of lowercase letters, digits, and hyphens.
 It refuses to run if the certificate's public key doesn't match the key blob.
 
 A test on 2026-11-14 against the live us-west-2 endpoint used a throwaway trust anchor, role, and Roles Anywhere profile.
@@ -106,7 +107,7 @@ Checked on 2026-11-14:
 | 1Password | No X.509 signing (its agent only produces SSH signatures, and it has no PKCS#11). Using it means exporting the key into `openssl` on every signature. |
 | `step` + `step-kms-plugin` (`mackms:`) | `mackms` keeps enclave keys in the data-protection keychain, which needs a `keychain-access-groups` entitlement. The released binaries are ad-hoc signed and fail with `-34018` (`errSecMissingEntitlement`); the README says enclave support is for "signed binaries" only. Its options are no user check at all (`se=true`) or `BiometryCurrentSet` (`bio=true`). The plugin release ships only a checksum file, with no signature or attestation. |
 
-What you have to trust here: Apple's CryptoKit and Security frameworks, Apple's `swift-certificates`/`swift-asn1`/`swift-crypto`, and the few hundred lines in `Sources/`.
+What you have to trust here: Apple's CryptoKit and Security frameworks, Apple's `swift-certificates`/`swift-asn1`/`swift-crypto`, and about 1,400 lines in `Sources/`.
 Independent checks: `openssl verify` on every issued cert, and AWS itself on first use.
 
 ## Failure modes

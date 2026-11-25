@@ -48,13 +48,14 @@ keys)
     for f in ak.pub ak.priv ek.crt; do [[ ! -e $dir/$f ]] || die "$dir/$f already exists"; done
     load_ek
     tpm2_createak -C "$WORK/ek.ctx" -c "$WORK/ak.ctx" -G ecc -g sha256 -s ecdsa \
-        -u "$dir/ak.pub" -r "$dir/ak.priv" >/dev/null
-    chmod 600 "$dir/ak.priv"
-    tpm2_nvread "$EK_CERT_NV" -o "$dir/ek.crt"
+        -u "$WORK/ak.pub" -r "$WORK/ak.priv" >/dev/null
+    chmod 600 "$WORK/ak.priv"
+    tpm2_nvread "$EK_CERT_NV" -o "$WORK/ek.crt"
     # The EK certificate must be for the EK this TPM derives, or the CA's challenge can't be answered.
     tpm2_readpublic -c "$WORK/ek.ctx" -f pem -o "$WORK/ek.pem" >/dev/null
-    openssl x509 -inform DER -in "$dir/ek.crt" -noout -pubkey | cmp -s - "$WORK/ek.pem" \
+    openssl x509 -inform DER -in "$WORK/ek.crt" -noout -pubkey | cmp -s - "$WORK/ek.pem" \
         || die "EK certificate at NV $EK_CERT_NV does not match the ECC EK"
+    for f in ak.pub ak.priv ek.crt; do mv "$WORK/$f" "$dir/$f"; done
     echo "wrote $dir/ak.pub $dir/ak.priv $dir/ek.crt; copy ek.crt and ak.pub to the CA"
     ;;
 activate)
@@ -71,7 +72,7 @@ certify)
     [[ $# == 4 ]] || die "usage: certify DIR KEY.tss OUT.pem"
     dir=$2 key=$3 out=$4
     load_ak "$dir"
-    tpm2_load -r "$key" -c "$WORK/key.ctx" >/dev/null 2>&1 || die "could not load $key"
+    tpm2_load -r "$key" -c "$WORK/key.ctx" >/dev/null || die "could not load $key"
     tpm2_readpublic -c "$WORK/key.ctx" -o "$WORK/key.pub" >/dev/null
     tpm2_certify -c "$WORK/key.ctx" -C "$WORK/ak.ctx" -g sha256 \
         -o "$WORK/attest" -s "$WORK/sig" -f plain >/dev/null

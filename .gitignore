@@ -3,6 +3,13 @@
 *.key
 *.crt
 *.csr
+*.tpm.json
+*.challenge
+*.activated
+*.attest.pem
+*.tss
+ak.pub
+ak.priv
 !Tests/EnclaveCATests/Fixtures/**
 .worktree/
 

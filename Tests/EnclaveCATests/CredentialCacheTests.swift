@@ -40,8 +40,22 @@ func testLeaf() throws -> Certificate {
 
     #expect(throws: UsageError.self) { try parseFlags(["--cache", "--cache"], switches: ["cache"]) }
     #expect(throws: UsageError.self) { try parseFlags(["--cache"]) }
-    #expect(try parseFlags(["--cache", "--key"]) == ["cache": "--key"])
+    #expect(throws: UsageError.self) { try parseFlags(["--cache", "--key"]) }
+    #expect(throws: UsageError.self) { try parseFlags(["--key", "--cn", "mac"]) }
     #expect(throws: UsageError.self) { try rejectUnknown(parseFlags(["--cache"], switches: ["cache"])) }
+}
+
+@Test func intFlags() throws {
+    var flags = try parseFlags(["--days", "30", "--duration-seconds", "soon"])
+    #expect(try takeInt(&flags, "days", default: 365) == 30)
+    #expect(try takeInt(&flags, "days", default: 365) == 365)
+    do {
+        _ = try takeInt(&flags, "duration-seconds", default: 3600)
+        Issue.record("expected UsageError")
+    } catch let e as UsageError {
+        #expect(e.description.contains("--duration-seconds"))
+        #expect(e.description.contains("soon"))
+    }
 }
 
 @Test func clientKeyAccessParsing() throws {

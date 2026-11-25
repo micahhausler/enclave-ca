@@ -41,13 +41,10 @@ usage:
       10 minutes before they expire, so a prompting key prompts about once
       per session instead of on every aws command.
 
-"""
+  enclave-ca --version
+      Print the version.
 
-func takeDays(_ flags: inout [String: String], default d: Int) throws -> Int {
-    guard let s = flags.removeValue(forKey: "days") else { return d }
-    guard let n = Int(s) else { throw UsageError(description: "--days must be an integer, got \"\(s)\"") }
-    return n
-}
+"""
 
 func pem(_ cert: Certificate) throws -> String {
     try cert.serializeAsPEM().pemString + "\n"
@@ -56,9 +53,52 @@ func pem(_ cert: Certificate) throws -> String {
 /// Creates the file, failing if it already exists.
 func writeNew(_ path: String, _ data: Data, mode: mode_t) throws {
     let fd = open(path, O_WRONLY | O_CREAT | O_EXCL, mode)
-    guard fd >= 0 else { throw UsageError(description: "\(path): \(String(cString: strerror(errno)))") }
+    guard fd >= 0 else { throw Failure("\(path): \(String(cString: strerror(errno)))") }
     let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
-    try handle.write(contentsOf: data)
+    do {
+        try handle.write(contentsOf: data)
+    } catch {
+        unlink(path)
+        throw Failure("\(path): \(error.localizedDescription)")
+    }
+}
+
+/// All or none.
+func writeNewAll(_ files: [(path: String, data: Data, mode: mode_t)]) throws {
+    var written: [String] = []
+    do {
+        for f in files {
+            try writeNew(f.path, f.data, mode: f.mode)
+            written.append(f.path)
+        }
+    } catch {
+        for p in written { unlink(p) }
+        throw error
+    }
+}
+
+func readData(_ path: String) throws -> Data {
+    do {
+        return try Data(contentsOf: URL(fileURLWithPath: path))
+    } catch {
+        throw Failure("\(path): \((error as NSError).localizedFailureReason ?? error.localizedDescription)")
+    }
+}
+
+func readText(_ path: String) throws -> String {
+    do {
+        return try String(contentsOfFile: path, encoding: .utf8)
+    } catch {
+        throw Failure("\(path): \((error as NSError).localizedFailureReason ?? error.localizedDescription)")
+    }
+}
+
+func loadKey<K>(_ path: String, _ load: () throws -> K) throws -> K {
+    do {
+        return try load()
+    } catch {
+        throw Failure("\(path) is not a Secure Enclave key this Mac can use: \(error.localizedDescription)")
+    }
 }
 
 func summary(_ cert: Certificate) throws -> String {
@@ -75,24 +115,23 @@ func runInit(_ flags: inout [String: String]) throws {
     let keyPath = try take(&flags, "key")
     let certPath = try take(&flags, "cert")
     let cn = try take(&flags, "cn")
-    let days = try takeDays(&flags, default: 3650)
+    let days = try takeInt(&flags, "days", default: 3650)
     try rejectUnknown(flags)
 
     for p in [keyPath, certPath] where FileManager.default.fileExists(atPath: p) {
-        throw UsageError(description: "\(p) already exists; refusing to overwrite")
+        throw Failure("\(p) already exists; refusing to overwrite")
     }
 
-    let blob = try EnclaveKey.create().dataRepresentation
-    let key = try EnclaveKey.load(blob, reason: "create root CA \"CN=\(cn)\"")
+    let blob = try EnclaveKey.create(access: .userPresence).dataRepresentation
+    let key = Certificate.PrivateKey(try EnclaveKey.load(blob, reason: "create root CA \"CN=\(cn)\""))
     let cert = try makeRoot(key: key, commonName: cn, days: days)
 
-    try writeNew(keyPath, blob, mode: 0o600)
-    try writeNew(certPath, Data(try pem(cert).utf8), mode: 0o644)
+    try writeNewAll([(keyPath, blob, 0o600), (certPath, Data(try pem(cert).utf8), 0o644)])
     print(try summary(cert))
 }
 
 func readEnrollment(_ path: String) throws -> TPMEnrollment {
-    try JSONDecoder().decode(TPMEnrollment.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
+    try JSONDecoder().decode(TPMEnrollment.self, from: readData(path))
 }
 
 func encodeEnrollment(_ e: TPMEnrollment) throws -> Data {
@@ -108,7 +147,7 @@ func writeAtomic(_ path: String, _ data: Data, mode: mode_t) throws {
     guard rename(tmp, path) == 0 else {
         let msg = String(cString: strerror(errno))
         unlink(tmp)
-        throw UsageError(description: "\(path): \(msg)")
+        throw Failure("\(path): \(msg)")
     }
 }
 
@@ -118,7 +157,7 @@ func runSign(_ flags: inout [String: String]) throws {
     let csrPath = try take(&flags, "csr")
     let cn = try take(&flags, "cn")
     let outPath = try take(&flags, "out")
-    let days = try takeDays(&flags, default: 365)
+    let days = try takeInt(&flags, "days", default: 365)
     let enrollmentPath = flags.removeValue(forKey: "tpm-enrollment")
     let attestationPath = flags.removeValue(forKey: "tpm-attestation")
     try rejectUnknown(flags)
@@ -126,21 +165,21 @@ func runSign(_ flags: inout [String: String]) throws {
         throw UsageError(description: "--tpm-enrollment and --tpm-attestation go together")
     }
 
-    let caCert = try Certificate(pemEncoded: String(contentsOfFile: caCertPath, encoding: .utf8))
-    let csr = try parseCSR(pem: String(contentsOfFile: csrPath, encoding: .utf8))
+    let caCert = try Certificate(pemEncoded: readText(caCertPath))
+    let csr = try parseCSR(pem: readText(csrPath))
 
     // Check the attestation before asking for Touch ID, so a bad one never prompts.
     var ou: String?
     if let enrollmentPath, let attestationPath {
-        let bundle = try TPMAttestationBundle(pem: String(contentsOfFile: attestationPath, encoding: .utf8))
+        let bundle = try TPMAttestationBundle(pem: readText(attestationPath))
         try verifyTPMAttestation(bundle, enrollment: readEnrollment(enrollmentPath), csr: csr, commonName: cn)
         ou = tpmAttestedOU
         print("TPM attestation verified: CSR key is non-exportable in the TPM enrolled for CN=\(cn)")
     }
 
-    let blob = try Data(contentsOf: URL(fileURLWithPath: keyPath))
-    let what = ou.map { "\"CN=\(cn), OU=\($0)\"" } ?? "\"CN=\(cn)\""
-    let key = try EnclaveKey.load(blob, reason: "sign \(what) for \(days) days")
+    let blob = try readData(keyPath)
+    let what = ou.map { "\"OU=\($0), CN=\(cn)\"" } ?? "\"CN=\(cn)\""
+    let key = try loadKey(keyPath) { Certificate.PrivateKey(try EnclaveKey.load(blob, reason: "sign \(what) for \(days) days")) }
 
     let leaf = try signLeaf(csr: csr, caCert: caCert, caKey: key, commonName: cn, days: days, organizationalUnit: ou)
 
@@ -150,7 +189,7 @@ func runSign(_ flags: inout [String: String]) throws {
 
 /// Reads a certificate as PEM or DER (tpm2_nvread writes DER).
 func readCertificateDER(_ path: String) throws -> [UInt8] {
-    let data = try Data(contentsOf: URL(fileURLWithPath: path))
+    let data = try readData(path)
     if let text = String(data: data, encoding: .utf8), text.contains("-----BEGIN") {
         return try PEMDocument(pemString: text).derBytes
     }
@@ -166,15 +205,14 @@ func runTPMChallenge(_ flags: inout [String: String]) throws {
     try rejectUnknown(flags)
 
     for p in [enrollmentPath, outPath] where FileManager.default.fileExists(atPath: p) {
-        throw UsageError(description: "\(p) already exists; refusing to overwrite")
+        throw Failure("\(p) already exists; refusing to overwrite")
     }
     let (pending, blob) = try TPMEnrollment.challenge(
         commonName: cn,
         ekCertificateDER: readCertificateDER(ekPath),
-        attestationKeyTPM2BPublic: Array(Data(contentsOf: URL(fileURLWithPath: akPath)))
+        attestationKeyTPM2BPublic: Array(readData(akPath))
     )
-    try writeNew(outPath, Data(blob), mode: 0o644)
-    try writeNew(enrollmentPath, try encodeEnrollment(pending), mode: 0o644)
+    try writeNewAll([(outPath, Data(blob), 0o644), (enrollmentPath, try encodeEnrollment(pending), 0o644)])
     print("wrote \(outPath) (credential for tpm2_activatecredential) and pending \(enrollmentPath) for CN=\(cn)")
 }
 
@@ -184,7 +222,7 @@ func runTPMEnroll(_ flags: inout [String: String]) throws {
     try rejectUnknown(flags)
 
     let done = try readEnrollment(enrollmentPath)
-        .completing(withActivatedSecret: Array(Data(contentsOf: URL(fileURLWithPath: activatedPath))))
+        .completing(withActivatedSecret: Array(readData(activatedPath)))
     try writeAtomic(enrollmentPath, try encodeEnrollment(done), mode: 0o644)
     print("""
     enrolled CN=\(done.commonName)
@@ -201,13 +239,15 @@ func runClientKey(_ flags: inout [String: String]) throws {
     try rejectUnknown(flags)
 
     for p in [keyPath, csrPath] where FileManager.default.fileExists(atPath: p) {
-        throw UsageError(description: "\(p) already exists; refusing to overwrite")
+        throw Failure("\(p) already exists; refusing to overwrite")
     }
-    let key = try EnclaveKey.createClient(access: access)
-    let signer = try EnclaveKey.loadClient(key.dataRepresentation, reason: "sign a CSR for \"CN=\(cn)\"")
+    let key = try EnclaveKey.create(access: access)
+    let signer = try EnclaveKey.load(key.dataRepresentation, reason: "sign a CSR for \"CN=\(cn)\"")
     let csr = try makeCSR(key: Certificate.PrivateKey(signer), commonName: cn)
-    try writeNew(keyPath, key.dataRepresentation, mode: 0o600)
-    try writeNew(csrPath, Data((try csr.serializeAsPEM().pemString + "\n").utf8), mode: 0o644)
+    try writeNewAll([
+        (keyPath, key.dataRepresentation, 0o600),
+        (csrPath, Data((try csr.serializeAsPEM().pemString + "\n").utf8), 0o644),
+    ])
     print("wrote \(keyPath) and \(csrPath) for CN=\(cn)\(access == .none ? "" : " (access: \(access.rawValue))")")
 }
 
@@ -217,17 +257,13 @@ func runCredentialProcess(_ flags: inout [String: String]) async throws {
     let ta = try take(&flags, "trust-anchor-arn")
     let profile = try take(&flags, "profile-arn")
     let role = try take(&flags, "role-arn")
-    var duration = 3600
-    if let s = flags.removeValue(forKey: "duration-seconds") {
-        guard let n = Int(s) else { throw UsageError(description: "--duration-seconds must be an integer") }
-        duration = n
-    }
+    let duration = try takeInt(&flags, "duration-seconds", default: 3600)
     let sessionName = flags.removeValue(forKey: "role-session-name")
     let useCache = takeSwitch(&flags, "cache")
     try rejectUnknown(flags)
 
-    let cert = try Certificate(pemEncoded: String(contentsOfFile: certPath, encoding: .utf8))
-    let blob = try Data(contentsOf: URL(fileURLWithPath: keyPath))
+    let cert = try Certificate(pemEncoded: readText(certPath))
+    let blob = try readData(keyPath)
     let params = RolesAnywhere.SessionParams(
         trustAnchorArn: ta, profileArn: profile, roleArn: role,
         durationSeconds: duration, roleSessionName: sessionName
@@ -246,9 +282,9 @@ func runCredentialProcess(_ flags: inout [String: String]) async throws {
         }
     }
 
-    let key = try EnclaveKey.loadClient(blob, reason: "get AWS credentials for \(role)")
+    let key = try loadKey(keyPath) { try EnclaveKey.load(blob, reason: "get AWS credentials for \(role)") }
     guard cert.publicKey == Certificate.PublicKey(key.publicKey) else {
-        throw UsageError(description: "\(certPath) is not for the key in \(keyPath)")
+        throw Failure("\(certPath) is not for the key in \(keyPath)")
     }
     let req = try RolesAnywhere.signedRequest(
         params: params,
@@ -284,19 +320,29 @@ if ["-h", "--help", "help"].contains(cmd) {
     print(usage, terminator: "")
     exit(0)
 }
+if cmd == "--version" {
+    print("enclave-ca \(enclaveCAVersion)")
+    exit(0)
+}
+
+let commands: [String: (inout [String: String]) async throws -> Void] = [
+    "init": runInit,
+    "sign": runSign,
+    "client-key": runClientKey,
+    "tpm-challenge": runTPMChallenge,
+    "tpm-enroll": runTPMEnroll,
+    "credential-process": runCredentialProcess,
+]
 
 do {
+    guard let run = commands[cmd] else { throw UsageError(description: "unknown command \"\(cmd)\"") }
+    if args.contains("-h") || args.contains("--help") {
+        print(usage, terminator: "")
+        exit(0)
+    }
     let switches: [String: Set<String>] = ["credential-process": ["cache"]]
     var flags = try parseFlags(args, switches: switches[cmd] ?? [])
-    switch cmd {
-    case "init": try runInit(&flags)
-    case "sign": try runSign(&flags)
-    case "client-key": try runClientKey(&flags)
-    case "tpm-challenge": try runTPMChallenge(&flags)
-    case "tpm-enroll": try runTPMEnroll(&flags)
-    case "credential-process": try await runCredentialProcess(&flags)
-    default: throw UsageError(description: "unknown command \"\(cmd)\"")
-    }
+    try await run(&flags)
 } catch let e as UsageError {
     FileHandle.standardError.write(Data("enclave-ca: \(e)\n\n\(usage)".utf8))
     exit(2)

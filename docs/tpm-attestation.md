@@ -34,7 +34,7 @@ Each step extends trust from something already trusted to one more key:
 
 1. **The EK certificate you copy off the host pins the EK.** It is the one thing enrollment takes on trust, so it has to reach the CA over a secure channel.
 2. **Credential activation proves the AK lives in that EK's TPM.** Only that TPM, with that AK loaded, can answer the challenge.
-3. **The AK's attributes prove it can't be faked, given a genuine EK.** A TPM refuses to import a key with `fixedTPM` or `restricted` set, so a key with both that passes activation was created inside the TPM. Attributes are just bytes in a public area, so with a software EK they prove nothing.
+3. **The AK's attributes prove it can't be faked, given a genuine EK.** `TPM2_Import` refuses a key with `fixedTPM` or `fixedParent` set, and `TPM2_LoadExternal` refuses `fixedTPM`, `fixedParent`, or `restricted` when it loads a private part, so a key with `fixedTPM` and `restricted` that passes activation was created inside the TPM. Attributes are just bytes in a public area, so with a software EK they prove nothing.
 4. **Certify proves the client key lives in the same TPM.** The AK signs the client key's name, and the name commits to the key's attributes, including `fixedTPM`.
 5. **The CSR's public key must match the certified key.** That ties the attestation to the CSR being signed.
 

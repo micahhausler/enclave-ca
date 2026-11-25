@@ -82,7 +82,7 @@ extension TPMEnrollment {
 
         var secret = [UInt8](repeating: 0, count: 32)
         guard SecRandomCopyBytes(kSecRandomDefault, secret.count, &secret) == errSecSuccess else {
-            throw TPMError.malformed("could not generate a random challenge")
+            throw TPMError.failed("could not generate a random challenge")
         }
         let blob = try makeCredential(ek: ek, objectName: ak.name, secret: secret)
         let pending = TPMEnrollment(

@@ -50,12 +50,12 @@ func aes128CFB(encrypt: Bool, key: [UInt8], _ input: [UInt8]) throws -> [UInt8] 
         CCOperation(encrypt ? kCCEncrypt : kCCDecrypt), CCMode(kCCModeCFB), CCAlgorithm(kCCAlgorithmAES),
         CCPadding(ccNoPadding), iv, key, key.count, nil, 0, 0, 0, &ref
     )
-    guard status == kCCSuccess, let ref else { throw TPMError.malformed("AES-CFB setup failed (\(status))") }
+    guard status == kCCSuccess, let ref else { throw TPMError.failed("AES-CFB setup failed (\(status))") }
     defer { CCCryptorRelease(ref) }
     var out = [UInt8](repeating: 0, count: input.count)
     var moved = 0
     status = CCCryptorUpdate(ref, input, input.count, &out, out.count, &moved)
-    guard status == kCCSuccess, moved == input.count else { throw TPMError.malformed("AES-CFB failed (\(status))") }
+    guard status == kCCSuccess, moved == input.count else { throw TPMError.failed("AES-CFB failed (\(status))") }
     return out
 }
 

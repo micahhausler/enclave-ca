@@ -26,6 +26,22 @@ import X509
     #expect(throws: RolesAnywhere.Failure.self) { try RolesAnywhere.region(fromTrustAnchorArn: "arn:aws:iam::1:role/x") }
 }
 
+@Test func regionFromTrustAnchorArnAcceptsGovCloud() throws {
+    let arn = "arn:aws-us-gov:rolesanywhere:us-gov-west-1:111122223333:trust-anchor/00000000-0000-0000-0000-000000000000"
+    #expect(try RolesAnywhere.region(fromTrustAnchorArn: arn) == "us-gov-west-1")
+}
+
+@Test(arguments: [
+    "arn:aws-cn:rolesanywhere:cn-north-1:111122223333:trust-anchor/x",
+    "arn:aws:rolesanywhere:us-west-2.example.com:111122223333:trust-anchor/x",
+    "arn:aws:rolesanywhere:us-west-2/x:111122223333:trust-anchor/x",
+    "arn:aws:rolesanywhere::111122223333:trust-anchor/x",
+    "arn:aws:rolesanywhere:US-WEST-2:111122223333:trust-anchor/x",
+])
+func regionFromTrustAnchorArnRefusesUnsupported(_ arn: String) throws {
+    #expect(throws: RolesAnywhere.Failure.self) { try RolesAnywhere.region(fromTrustAnchorArn: arn) }
+}
+
 @Test func signedRequestShapeAndSignature() throws {
     let caKey = softwareKey()
     let root = try makeRoot(key: caKey, commonName: "Test Root", days: 3650, now: now)
@@ -76,4 +92,13 @@ import X509
     let out = try RolesAnywhere.processCredentials(fromResponse: Data(response.utf8))
     #expect(String(decoding: out, as: UTF8.self) == #"{"AccessKeyId":"AK","Expiration":"2027-01-15T09:00:00Z","SecretAccessKey":"SK","SessionToken":"ST","Version":1}"#)
     #expect(throws: RolesAnywhere.Failure.self) { try RolesAnywhere.processCredentials(fromResponse: Data("{}".utf8)) }
+}
+
+@Test func processCredentialsErrorOmitsResponseBody() throws {
+    let response = #"{"credentialSet":[{"credentials":{"accessKeyId":"AK","expiration":"2027-01-15T09:00:00Z","secretAccessKey":"SECRET"}}]}"#
+    let error = try #require(throws: RolesAnywhere.Failure.self) {
+        try RolesAnywhere.processCredentials(fromResponse: Data(response.utf8))
+    }
+    #expect(!error.description.contains("SECRET"))
+    #expect(!error.description.contains("AK"))
 }

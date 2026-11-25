@@ -147,4 +147,4 @@ log "negative: certificate for a different key"
 "$BIN" client-key --key other.key --csr other.csr --cn "$CN" >/dev/null
 rc=0
 "$BIN" "${cp_args[@]/client.key/other.key}" --role-arn "$ROLE_ARN" >/dev/null 2>err.txt || rc=$?
-[[ $rc == 2 ]] && grep -q 'is not for the key' err.txt || fail "key/cert mismatch not refused (rc=$rc): $(cat err.txt)"
+[[ $rc == 1 ]] && grep -q 'is not for the key' err.txt || fail "key/cert mismatch not refused (rc=$rc): $(cat err.txt)"

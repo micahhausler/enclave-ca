@@ -47,29 +47,16 @@ public enum ClientKeyAccess: String, CaseIterable, Sendable {
 
 /// A P-256 key that lives in this Mac's Secure Enclave.
 ///
-/// The private key never leaves the enclave. What we store on disk is `dataRepresentation`:
+/// The private key never leaves the enclave. The file on disk holds `dataRepresentation`:
 /// a blob wrapped by this device's enclave, useless on any other machine.
 ///
-/// Every signature requires user presence (Touch ID, or the login password as a fallback).
-/// `.userPresence` is deliberate: unlike `.biometryCurrentSet`, it survives adding or removing
-/// a fingerprint, so enrolling a finger does not destroy the CA. Each signature uses a fresh
-/// LAContext, so one approval never covers a second signature.
+/// The CA key, and a client key made with access `user-presence` or `passcode`, need user presence
+/// on every signature; a client key made with access `none` needs nothing.
+/// `.userPresence` survives adding or removing a fingerprint, unlike `.biometryCurrentSet`,
+/// so enrolling a finger does not destroy the CA. Each load uses a fresh LAContext, so one
+/// approval never covers a second signature.
 public enum EnclaveKey {
-    public static func create() throws -> SecureEnclave.P256.Signing.PrivateKey {
-        guard SecureEnclave.isAvailable else { throw EnclaveKeyError.secureEnclaveUnavailable }
-        var err: Unmanaged<CFError>?
-        guard let access = SecAccessControlCreateWithFlags(
-            nil,
-            kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-            [.privateKeyUsage, .userPresence],
-            &err
-        ) else {
-            throw EnclaveKeyError.accessControl(String(describing: err?.takeRetainedValue()))
-        }
-        return try SecureEnclave.P256.Signing.PrivateKey(accessControl: access)
-    }
-
-    public static func createClient(access mode: ClientKeyAccess) throws -> SecureEnclave.P256.Signing.PrivateKey {
+    public static func create(access mode: ClientKeyAccess) throws -> SecureEnclave.P256.Signing.PrivateKey {
         guard SecureEnclave.isAvailable else { throw EnclaveKeyError.secureEnclaveUnavailable }
         var err: Unmanaged<CFError>?
         guard let access = SecAccessControlCreateWithFlags(nil, mode.protection, mode.flags, &err) else {
@@ -79,17 +66,9 @@ public enum EnclaveKey {
     }
 
     /// `reason` is shown only if the key requires user presence.
-    public static func loadClient(_ blob: Data, reason: String) throws -> SecureEnclave.P256.Signing.PrivateKey {
+    public static func load(_ blob: Data, reason: String) throws -> SecureEnclave.P256.Signing.PrivateKey {
         let ctx = LAContext()
         ctx.localizedReason = reason
         return try SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: blob, authenticationContext: ctx)
-    }
-
-    /// Loads the wrapped key. `reason` is shown in the Touch ID prompt, so it should say what is being signed.
-    public static func load(_ blob: Data, reason: String) throws -> Certificate.PrivateKey {
-        let ctx = LAContext()
-        ctx.localizedReason = reason
-        let key = try SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: blob, authenticationContext: ctx)
-        return Certificate.PrivateKey(key)
     }
 }
