@@ -8,12 +8,14 @@ public enum TPMError: Error, CustomStringConvertible {
     case malformed(String)
     case unsupported(String)
     case rejected(String)
+    case failed(String)
 
     public var description: String {
         switch self {
         case let .malformed(m): return "malformed TPM structure: \(m)"
         case let .unsupported(m): return "unsupported TPM structure: \(m)"
         case let .rejected(m): return "TPM attestation rejected: \(m)"
+        case let .failed(m): return "TPM operation failed: \(m)"
         }
     }
 }

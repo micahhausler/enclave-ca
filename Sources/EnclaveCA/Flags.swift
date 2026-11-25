@@ -6,6 +6,15 @@ public struct UsageError: Error, CustomStringConvertible {
     }
 }
 
+/// A runtime failure, not a flag problem.
+public struct Failure: Error, CustomStringConvertible {
+    public let description: String
+
+    public init(_ description: String) {
+        self.description = description
+    }
+}
+
 /// `switches` take no value.
 public func parseFlags(_ args: some Sequence<String>, switches: Set<String> = []) throws -> [String: String] {
     var flags: [String: String] = [:]
@@ -18,7 +27,7 @@ public func parseFlags(_ args: some Sequence<String>, switches: Set<String> = []
             flags[name] = ""
             continue
         }
-        guard let value = it.next() else { throw UsageError(description: "\(arg) needs a value") }
+        guard let value = it.next(), !value.hasPrefix("--") else { throw UsageError(description: "\(arg) needs a value") }
         flags[name] = value
     }
     return flags
@@ -27,6 +36,12 @@ public func parseFlags(_ args: some Sequence<String>, switches: Set<String> = []
 public func take(_ flags: inout [String: String], _ name: String) throws -> String {
     guard let v = flags.removeValue(forKey: name) else { throw UsageError(description: "missing --\(name)") }
     return v
+}
+
+public func takeInt(_ flags: inout [String: String], _ name: String, default d: Int) throws -> Int {
+    guard let s = flags.removeValue(forKey: name) else { return d }
+    guard let n = Int(s) else { throw UsageError(description: "--\(name) must be an integer, got \"\(s)\"") }
+    return n
 }
 
 public func takeSwitch(_ flags: inout [String: String], _ name: String) -> Bool {

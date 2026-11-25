@@ -33,27 +33,36 @@ public enum RolesAnywhere {
     public enum Failure: Error, CustomStringConvertible {
         case badTrustAnchorArn(String)
         case http(status: Int, body: String)
-        case noCredentials(String)
+        case noCredentials
 
         public var description: String {
             switch self {
             case let .badTrustAnchorArn(arn):
-                return "can't read a region from trust anchor ARN \"\(arn)\""
+                return "can't read an aws or aws-us-gov region from trust anchor ARN \"\(arn)\""
             case let .http(status, body):
                 return "CreateSession returned HTTP \(status): \(body)"
-            case let .noCredentials(body):
-                return "CreateSession response had no credentials: \(body)"
+            case .noCredentials:
+                return "CreateSession response had no usable credentials"
             }
         }
     }
 
-    /// arn:aws:rolesanywhere:<region>:<account>:trust-anchor/<id>
+    static let partitions: Set<Substring> = ["aws", "aws-us-gov"]
+
+    /// arn:<aws|aws-us-gov>:rolesanywhere:<region>:<account>:trust-anchor/<id>
     public static func region(fromTrustAnchorArn arn: String) throws -> String {
         let parts = arn.split(separator: ":", omittingEmptySubsequences: false)
-        guard parts.count >= 6, parts[0] == "arn", parts[2] == "rolesanywhere", !parts[3].isEmpty else {
+        guard parts.count >= 6, parts[0] == "arn", partitions.contains(parts[1]), parts[2] == "rolesanywhere",
+              isRegionName(parts[3])
+        else {
             throw Failure.badTrustAnchorArn(arn)
         }
         return String(parts[3])
+    }
+
+    /// ^[a-z0-9-]+$
+    static func isRegionName(_ s: Substring) -> Bool {
+        !s.isEmpty && s.utf8.allSatisfy { (0x61...0x7A).contains($0) || (0x30...0x39).contains($0) || $0 == 0x2D }
     }
 
     public struct SignedRequest {
@@ -74,6 +83,9 @@ public enum RolesAnywhere {
         sign: (Data) throws -> Data
     ) throws -> SignedRequest {
         let host = "rolesanywhere.\(region).amazonaws.com"
+        guard let url = URL(string: "https://\(host)/sessions") else {
+            throw Failure.badTrustAnchorArn(params.trustAnchorArn)
+        }
         var bodyObject: [String: Any] = [
             "durationSeconds": params.durationSeconds,
             "profileArn": params.profileArn,
@@ -113,7 +125,7 @@ public enum RolesAnywhere {
         var headers = Dictionary(uniqueKeysWithValues: signed.map { ($0.0, $0.1) })
         headers["authorization"] = authorization
         return SignedRequest(
-            url: URL(string: "https://\(host)/sessions")!,
+            url: url,
             headers: headers,
             body: body,
             canonicalRequest: canonicalRequest,
@@ -135,9 +147,8 @@ public enum RolesAnywhere {
             }
             var credentialSet: [Item]
         }
-        let raw = String(decoding: data, as: UTF8.self)
         guard let first = try? JSONDecoder().decode(Response.self, from: data).credentialSet.first else {
-            throw Failure.noCredentials(raw)
+            throw Failure.noCredentials
         }
         let c = first.credentials
         let out: [String: Any] = [
@@ -162,20 +173,6 @@ public enum RolesAnywhere {
         }
         return data
     }
-}
-
-func derBytes(_ cert: Certificate) throws -> [UInt8] {
-    var s = DER.Serializer()
-    try s.serialize(cert)
-    return s.serializedBytes
-}
-
-public func hex<D: Sequence>(_ bytes: D) -> String where D.Element == UInt8 {
-    bytes.map { String(format: "%02x", $0) }.joined()
-}
-
-public func hexSHA256(_ data: Data) -> String {
-    hex(SHA256.hash(data: data))
 }
 
 func timestamp(_ date: Date, _ format: String) -> String {

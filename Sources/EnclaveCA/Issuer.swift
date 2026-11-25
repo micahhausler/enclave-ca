@@ -87,7 +87,7 @@ public func signLeaf(
         throw IssuerError.csrSignatureInvalid
     }
     let expected = "CN=\(commonName)"
-    guard csr.subject.description == expected else {
+    guard isOnlyCommonName(csr.subject, commonName) else {
         throw IssuerError.csrSubjectMismatch(expected: expected, got: csr.subject.description)
     }
     guard caCert.publicKey == caKey.publicKey else { throw IssuerError.caKeyMismatch }
@@ -125,6 +125,15 @@ public func signLeaf(
     )
 }
 
+/// One RDN holding one CN attribute equal to `commonName`.
+func isOnlyCommonName(_ subject: DistinguishedName, _ commonName: String) -> Bool {
+    guard subject.count == 1, let rdn = subject.first, rdn.count == 1, let attribute = rdn.first else {
+        return false
+    }
+    return attribute.type == ASN1ObjectIdentifier.RDNAttributeType.commonName
+        && String(attribute.value) == commonName
+}
+
 /// A CSR for `CN=<commonName>`, self-signed by `key`.
 public func makeCSR(key: Certificate.PrivateKey, commonName: String) throws -> CertificateSigningRequest {
     try CertificateSigningRequest(
@@ -138,9 +147,7 @@ public func makeCSR(key: Certificate.PrivateKey, commonName: String) throws -> C
 
 /// SHA-256 over the DER encoding, as colon-separated uppercase hex (the format `openssl x509 -fingerprint -sha256` prints).
 public func fingerprint(_ cert: Certificate) throws -> String {
-    var serializer = DER.Serializer()
-    try serializer.serialize(cert)
-    return SHA256.hash(data: serializer.serializedBytes)
+    SHA256.hash(data: try derBytes(cert))
         .map { String(format: "%02X", $0) }
         .joined(separator: ":")
 }

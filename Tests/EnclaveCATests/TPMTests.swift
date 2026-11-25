@@ -226,7 +226,7 @@ func activateCredential(ek: P256.KeyAgreement.PrivateKey, objectName: [UInt8], b
 }
 
 @Test func enrollmentChallengeAndComplete() throws {
-    // The challenge path with the real EK certificate and AK; completion is checked by hash only.
+    // The challenge path with the fixture EK certificate and AK; completion is checked by hash only.
     let e = try someHostEnrollment()
     let (pending, blob) = try TPMEnrollment.challenge(
         commonName: "some-host", ekCertificateDER: Array(e.ekCertificate), attestationKeyTPM2BPublic: Array(e.attestationKey)

@@ -92,6 +92,77 @@ func makeCSR(cn: String, key: Certificate.PrivateKey = softwareKey()) throws -> 
     }
 }
 
+func makeCSR(subject: DistinguishedName, key: Certificate.PrivateKey = softwareKey()) throws -> CertificateSigningRequest {
+    try CertificateSigningRequest(
+        version: .v1,
+        subject: subject,
+        privateKey: key,
+        attributes: CertificateSigningRequest.Attributes(),
+        signatureAlgorithm: .ecdsaWithSHA256
+    )
+}
+
+func expectSubjectRefused(_ subject: DistinguishedName, commonName: String) throws {
+    let caKey = softwareKey()
+    let root = try makeRoot(key: caKey, commonName: "Test Root", days: 3650, now: now)
+    let csr = try makeCSR(subject: subject)
+    #expect {
+        try signLeaf(csr: csr, caCert: root, caKey: caKey, commonName: commonName, days: 365, now: now)
+    } throws: { error in
+        if case IssuerError.csrSubjectMismatch = error { return true }
+        return false
+    }
+}
+
+@Test func rejectsCSRWithExtraRDN() throws {
+    let subject = try DistinguishedName {
+        OrganizationalUnitName("x")
+        CommonName("a")
+    }
+    #expect(subject.description == "CN=a,OU=x")
+    try expectSubjectRefused(subject, commonName: "a,OU=x")
+    try expectSubjectRefused(subject, commonName: "a")
+}
+
+@Test func rejectsCSRWithMultiValuedRDN() throws {
+    let rdn = RelativeDistinguishedName([
+        .init(type: .RDNAttributeType.commonName, utf8String: "a"),
+        .init(type: .RDNAttributeType.organizationalUnitName, utf8String: "x"),
+    ])
+    let subject = DistinguishedName([rdn])
+    #expect(subject.description == "CN=a+OU=x")
+    try expectSubjectRefused(subject, commonName: "a+OU=x")
+    try expectSubjectRefused(subject, commonName: "a")
+}
+
+@Test func rejectsCSRWithEmptySubject() throws {
+    try expectSubjectRefused(DistinguishedName(), commonName: "")
+}
+
+@Test func rejectsCSRWithNonCommonNameAttribute() throws {
+    let subject = DistinguishedName([
+        RelativeDistinguishedName(.init(type: .RDNAttributeType.organizationalUnitName, utf8String: "a")),
+    ])
+    try expectSubjectRefused(subject, commonName: "a")
+}
+
+@Test func acceptsPrintableStringCommonName() throws {
+    let caKey = softwareKey()
+    let root = try makeRoot(key: caKey, commonName: "Test Root", days: 3650, now: now)
+    let subject = DistinguishedName([
+        RelativeDistinguishedName(try .init(type: .RDNAttributeType.commonName, printableString: "some-host")),
+    ])
+    let csr = try makeCSR(subject: subject)
+    var s = DER.Serializer()
+    try s.serialize(csr)
+    let parsed = try CertificateSigningRequest(derEncoded: s.serializedBytes)
+    let value = try #require(parsed.subject.first?.first?.value)
+    #expect(value == (try RelativeDistinguishedName.Attribute.Value(printableString: "some-host")))
+    #expect(value != RelativeDistinguishedName.Attribute.Value(utf8String: "some-host"))
+    let leaf = try signLeaf(csr: parsed, caCert: root, caKey: caKey, commonName: "some-host", days: 365, now: now)
+    #expect(leaf.subject.description == "CN=some-host")
+}
+
 @Test func rejectsWrongCAKey() throws {
     let root = try makeRoot(key: softwareKey(), commonName: "Test Root", days: 3650, now: now)
     let csr = try makeCSR(cn: "some-host")
