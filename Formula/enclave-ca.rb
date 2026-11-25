@@ -1,8 +1,8 @@
 class EnclaveCa < Formula
   desc "Offline IAM Roles Anywhere CA with its root key in the Secure Enclave"
   homepage "https://github.com/micahhausler/enclave-ca"
-  url "https://github.com/micahhausler/enclave-ca/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "cb8d73123a4c75509e3de47873f304f9a1fba6e881d4b535d44ea7bea789ebd3"
+  url "https://github.com/micahhausler/enclave-ca/releases/download/v0.1.1/enclave-ca-0.1.1.tar.gz"
+  sha256 "2080be05d9f6a09ef3848111f10a2bcd8fc58f7d73b56d31cfe911cf33f9ff44"
   license "Apache-2.0"
   head "https://github.com/micahhausler/enclave-ca.git", branch: "main"
 
